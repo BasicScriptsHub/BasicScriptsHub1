@@ -1,41 +1,140 @@
-# Compiled Lua sources
-luac.out
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 
-# luarocks build files
-*.src.rock
-*.zip
-*.tar.gz
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local humanoid = char:WaitForChild("Humanoid")
+local hrp = char:WaitForChild("HumanoidRootPart")
 
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
+------------------------------------------------
+-- Settings
+------------------------------------------------
+local moving = false
+local stopDistance = 3
+local fixedSpeed = 30
 
-# Precompiled Headers
-*.gch
-*.pch
+------------------------------------------------
+-- Jump System (Double Jump)
+------------------------------------------------
+local jumpCount = 0
+local maxJumps = 2
+local lastState = humanoid:GetState()
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
+humanoid.StateChanged:Connect(function(oldState, newState)
+    -- إعادة عدد القفزات عند لمس الأرض
+    if newState == Enum.HumanoidStateType.Landed then
+        jumpCount = 0
+    end
+end)
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+UIS.JumpRequest:Connect(function()
+    -- إذا ما تجاوز القفزتين
+    if jumpCount < maxJumps then
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        jumpCount = jumpCount + 1
+    end
+end)
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+------------------------------------------------
+-- Find Delivery Box
+------------------------------------------------
+local function FindDelivery()
+    local plots = Workspace:FindFirstChild("Plots")
+    if not plots then return end
+    for _, plot in pairs(plots:GetChildren()) do
+        local sign = plot:FindFirstChild("PlotSign")
+        if sign then
+            local yourBase = sign:FindFirstChild("YourBase")
+            if yourBase and yourBase.Enabled then
+                return plot:FindFirstChild("DeliveryHitbox")
+            end
+        end
+    end
+end
 
+------------------------------------------------
+-- Move Player Fast Toward Target
+------------------------------------------------
+local RunService = game:GetService("RunService")
+
+local function moveToTarget(target, button)
+    moving = true
+    button.Text = "STOP"
+    while moving and target and target.Parent do
+        local direction = (target.Position - hrp.Position)
+        local distance = direction.Magnitude
+        if distance <= stopDistance then break end
+
+        local moveDir = direction.Unit * fixedSpeed
+        humanoid:Move(moveDir, false)
+        hrp.AssemblyLinearVelocity = moveDir
+
+        RunService.Heartbeat:Wait()
+    end
+    humanoid:Move(Vector3.zero, false)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    moving = false
+    button.Text = "DELIVER"
+end
+
+------------------------------------------------
+-- GUI
+------------------------------------------------
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.ResetOnSpawn = false
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0,220,0,80)
+frame.Position = UDim2.new(1,-240,0,50)
+frame.BackgroundColor3 = Color3.fromRGB(40,40,50)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+
+Instance.new("UICorner",frame).CornerRadius = UDim.new(0,12)
+
+local deliverBtn = Instance.new("TextButton",frame)
+deliverBtn.Size = UDim2.new(0,200,0,50)
+deliverBtn.Position = UDim2.new(0,10,0,15)
+deliverBtn.Text = "DELIVER"
+deliverBtn.BackgroundColor3 = Color3.fromRGB(70,130,180)
+deliverBtn.TextColor3 = Color3.new(1,1,1)
+deliverBtn.TextScaled = true
+deliverBtn.Font = Enum.Font.GothamBold
+
+deliverBtn.MouseButton1Click:Connect(function()
+    if moving then
+        moving = false
+        return
+    end
+    local target = FindDelivery()
+    if target then
+        moveToTarget(target, deliverBtn)
+    end
+end)
+
+local closeBtn = Instance.new("TextButton",frame)
+closeBtn.Size = UDim2.new(0,25,0,25)
+closeBtn.Position = UDim2.new(1,-30,0,5)
+closeBtn.Text = "X"
+closeBtn.BackgroundColor3 = Color3.fromRGB(200,50,50)
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.TextScaled = true
+closeBtn.Font = Enum.Font.GothamBold
+
+closeBtn.MouseButton1Click:Connect(function()
+    moving = false
+    gui.Enabled = false
+end)
+
+------------------------------------------------
+-- Toggle GUI
+------------------------------------------------
+UIS.InputBegan:Connect(function(input,gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        gui.Enabled = not gui.Enabled
+    end
+end)
